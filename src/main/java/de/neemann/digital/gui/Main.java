@@ -718,6 +718,41 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
             }
         }.createJMenuItem());
 
+        file.addSeparator();
+
+        // Collaboration Integration
+        file.add(new ToolTipAction("Start Collaboration Room") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    circuitComponent.getCircuit().save(baos);
+                    String xml = baos.toString("utf-8");
+                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
+                    cj.getMethod("cjCall", String.class, Object[].class).invoke(null, "startCollaboration", new Object[]{xml});
+                } catch (Exception ex) {
+                    showError("Collaboration only available in Web version", ex);
+                }
+            }
+        }.createJMenuItem());
+
+        file.add(new ToolTipAction("Sync Collaboration") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    circuitComponent.getCircuit().save(baos);
+                    String xml = baos.toString("utf-8");
+                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
+                    cj.getMethod("cjCall", String.class, Object[].class).invoke(null, "syncCollaboration", new Object[]{xml});
+                } catch (Exception ex) {
+                    showError("Collaboration only available in Web version", ex);
+                }
+            }
+        }.createJMenuItem());
+
+        file.addSeparator();
+
         file.add(saveAs.createJMenuItem());
         file.add(export);
 

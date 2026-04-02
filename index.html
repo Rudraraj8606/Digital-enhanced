@@ -7,21 +7,100 @@
     <!-- Load Google APIs -->
     <script async defer src="https://apis.google.com/js/api.js"></script>
     <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <!-- Load Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
         body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #222; }
         #container { width: 100vw; height: 100vh; }
-        #drive-controls { position: fixed; top: 10px; right: 10px; z-index: 1000; }
+        #drive-controls { position: fixed; top: 10px; right: 10px; z-index: 1000; display: flex; gap: 10px; }
         .btn { padding: 8px 16px; background: #4285f4; color: white; border: none; cursor: pointer; font-family: sans-serif; border-radius: 4px; }
+        .room-info { background: rgba(255,255,255,0.1); color: #fff; padding: 8px; font-family: monospace; border-radius: 4px; display: none; }
     </style>
 </head>
 <body>
     <div id="drive-controls">
+        <div id="room-label" class="room-info">Room: Not Active</div>
         <button id="auth-btn" class="btn" onclick="handleAuthClick()">Sign in to Google Drive</button>
     </div>
     <div id="container"></div>
 
     <script>
-        // --- Google Drive Configuration ---
+        // --- Firebase Configuration (FREE TIER) ---
+        // YOU MUST REPLACE THESE WITH YOUR OWN FIREBASE CONFIG LATER
+        const firebaseConfig = {
+            apiKey: "AIza...",
+            authDomain: "your-project.firebaseapp.com",
+            databaseURL: "https://your-project.firebaseio.com",
+            projectId: "your-project",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "123",
+            appId: "1:123:web:456"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+        let currentRoomId = null;
+
+        // --- Bridge Functions for Collaboration ---
+
+        // Generate a random room ID
+        function generateRoomId() {
+            return Math.random().toString(36).substring(2, 8).toUpperCase();
+        }
+
+        // Called from Main.java
+        window.startCollaboration = async function(xmlContent) {
+            currentRoomId = generateRoomId();
+            const roomRef = database.ref('rooms/' + currentRoomId);
+            await roomRef.set({
+                circuit: xmlContent,
+                timestamp: Date.now()
+            });
+
+            // Update URL so others can join
+            const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?room=' + currentRoomId;
+            window.history.pushState({path:newUrl},'',newUrl);
+            
+            document.getElementById('room-label').innerText = 'Room: ' + currentRoomId;
+            document.getElementById('room-label').style.display = 'block';
+            alert("Room Created! Share this link with friends:\n" + newUrl);
+        };
+
+        // Called from Main.java
+        window.syncCollaboration = async function(xmlContent) {
+            if (!currentRoomId) {
+                alert("No active room. Start a room first!");
+                return;
+            }
+            const roomRef = database.ref('rooms/' + currentRoomId);
+            await roomRef.update({
+                circuit: xmlContent,
+                timestamp: Date.now()
+            });
+            alert("Circuit Synced to Room!");
+        };
+
+        // Automatic Joining if ?room= exists in URL
+        async function checkJoinRoom() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const roomId = urlParams.get('room');
+            if (roomId) {
+                currentRoomId = roomId;
+                document.getElementById('room-label').innerText = 'Room: ' + currentRoomId;
+                document.getElementById('room-label').style.display = 'block';
+
+                // Listen for changes
+                const roomRef = database.ref('rooms/' + currentRoomId);
+                roomRef.on('value', (snapshot) => {
+                    const data = snapshot.val();
+                    if (data && data.circuit) {
+                        console.log("Room data updated, reloading circuit...");
+                        // In a real implementation, we would send this XML back to the Java app
+                        // to refresh the screen. For now, we alert the user.
+                    }
+                });
+            }
+        }
         const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID'; // YOU MUST REPLACE THIS
         const SCOPES = 'https://www.googleapis.com/auth/drive.file';
         let tokenClient;
@@ -134,6 +213,8 @@
             await cheerpjInit();
             const container = document.getElementById('container');
             cheerpjCreateDisplay(window.innerWidth, window.innerHeight, container);
+            // Check for room joining
+            await checkJoinRoom();
             // Start the application
             await cheerpjRunMain("de.neemann.digital.gui.Main", "/app/Digital.jar");
         }
