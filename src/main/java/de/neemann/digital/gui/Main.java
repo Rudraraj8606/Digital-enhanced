@@ -677,10 +677,47 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
         file.add(newFile.createJMenuItem());
         file.add(newSubFile.createJMenuItem());
         file.add(open.createJMenuItem());
+
+        // Google Drive Integration
+        file.add(new ToolTipAction("Open from Google Drive") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    // Use reflection to call CheerpJ at runtime without a compile-time dependency
+                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
+                    cj.getMethod("cjCall", String.class).invoke(null, "openFromGoogleDrive");
+                } catch (Exception ex) {
+                    showError("Could not connect to Google Drive (Web only)", ex);
+                }
+            }
+        }.createJMenuItem());
+
         file.add(openRecent);
         file.add(openWin.createJMenuItem());
         file.add(openRecentNewWindow);
         file.add(save.createJMenuItem());
+
+        // Google Drive Integration
+        file.add(new ToolTipAction("Save to Google Drive") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                try {
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    circuitComponent.getCircuit().save(baos);
+                    String xml = baos.toString("utf-8");
+                    String name = "circuit.dig";
+                    if (filename != null) {
+                        name = filename.getName();
+                    }
+                    // Use reflection to call CheerpJ at runtime
+                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
+                    cj.getMethod("cjCall", String.class, Object[].class).invoke(null, "saveToGoogleDrive", new Object[]{name, xml});
+                } catch (Exception ex) {
+                    showError("Could not save to Google Drive (Web only)", ex);
+                }
+            }
+        }.createJMenuItem());
+
         file.add(saveAs.createJMenuItem());
         file.add(export);
 
