@@ -1479,6 +1479,58 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
         return library;
     }
 
+    private void showWireColorPopup(Wire wire, java.awt.event.MouseEvent e) {
+        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+
+        // Quick preset palette  (null = clear custom color)
+        final java.awt.Color[] presets = {
+            new java.awt.Color(220, 50, 50),   // red
+            new java.awt.Color(0, 160, 0),     // green
+            new java.awt.Color(30, 120, 220),  // blue
+            new java.awt.Color(255, 140, 0),   // orange
+            new java.awt.Color(160, 0, 200),   // purple
+            new java.awt.Color(0, 180, 180),   // cyan
+            new java.awt.Color(200, 180, 0),   // yellow
+            new java.awt.Color(120, 80, 40),   // brown
+            null                               // default (remove color)
+        };
+        final String[] labels = {"Red", "Green", "Blue", "Orange", "Purple", "Cyan", "Yellow", "Brown", "Default"};
+
+        javax.swing.JPanel palette = new javax.swing.JPanel(new java.awt.GridLayout(1, presets.length, 3, 3));
+        palette.setBorder(javax.swing.BorderFactory.createEmptyBorder(4, 6, 4, 6));
+        for (int i = 0; i < presets.length; i++) {
+            final java.awt.Color c = presets[i];
+            final String tip = labels[i];
+            javax.swing.JButton btn = new javax.swing.JButton();
+            btn.setPreferredSize(new java.awt.Dimension(26, 26));
+            btn.setToolTipText(tip);
+            if (c == null) {
+                btn.setText("✕");
+                btn.setFont(btn.getFont().deriveFont(12f));
+            } else {
+                btn.setBackground(c);
+                btn.setOpaque(true);
+                btn.setBorderPainted(false);
+            }
+            btn.addActionListener(ev -> {
+                popup.setVisible(false);
+                modify(new de.neemann.digital.gui.components.modification.ModifyWireAttributes(wire, c));
+            });
+            palette.add(btn);
+        }
+        popup.add(palette);
+        popup.addSeparator();
+        javax.swing.JMenuItem custom = new javax.swing.JMenuItem(Lang.get("key_wireColor") + "…");
+        custom.addActionListener(ev -> {
+            java.awt.Color chosen = javax.swing.JColorChooser.showDialog(
+                    CircuitComponent.this, Lang.get("key_wireColor"), wire.getCustomColor());
+            if (chosen != null)
+                modify(new de.neemann.digital.gui.components.modification.ModifyWireAttributes(wire, chosen));
+        });
+        popup.add(custom);
+        popup.show(CircuitComponent.this, e.getX(), e.getY());
+    }
+
     private void editGroup(Vector min, Vector max) {
         if (!isLocked())
             try {
@@ -1809,10 +1861,7 @@ public class CircuitComponent extends JComponent implements ChangedListener, Lib
                 else {
                     Wire wire = getCircuit().getWireAt(pos, SIZE2);
                     if (wire != null) {
-                        java.awt.Color c = JColorChooser.showDialog(CircuitComponent.this, Lang.get("key_wireColor"), wire.getCustomColor());
-                        if (c != null) {
-                            modify(new ModifyWireAttributes(wire, c));
-                        }
+                        showWireColorPopup(wire, e);
                     }
                 }
             } else if (mouse.isPrimaryClick(e) && hadFocusAtClick) {

@@ -91,6 +91,24 @@ import static javax.swing.JOptionPane.showInputDialog;
  * Set log level: -Dorg.slf4j.simpleLogger.defaultLogLevel=debug
  */
 public final class Main extends JFrame implements ClosingWindowListener.ConfirmSave, FileHistory.OpenInterface, DigitalRemoteInterface, StatusInterface, ChangedListener {
+
+    static {
+        System.setProperty("java.version", "1.8.0_352");
+        System.setProperty("java.specification.version", "1.8");
+        System.setProperty("java.vendor", "CheerpJ");
+    }
+    
+    static {
+        if (System.getProperty("java.version") == null) {
+            System.setProperty("java.version", "1.8.0_352");
+        }
+        if (System.getProperty("java.specification.version") == null) {
+            System.setProperty("java.specification.version", "1.8");
+        }
+        if (System.getProperty("java.vendor") == null) {
+            System.setProperty("java.vendor", "CheerpJ");
+        }
+    }
     private static final Logger LOGGER = LoggerFactory.getLogger(Main.class);
     private static final String KEY_START_STOP_ACTION = "startStop";
     private static boolean experimental;
@@ -155,6 +173,14 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
     private State runModelMicroState;
     private JComponent componentOnPane;
     private LibraryTreeModel treeModel;
+
+    // ── Collaboration ────────────────────────────────────────────────────────
+    private de.neemann.digital.gui.collab.CollabHost collabHost;
+    private de.neemann.digital.gui.collab.CollabGuest collabGuest;
+    private de.neemann.digital.gui.collab.CollabSession collabSession;
+    private String collabRoomCode;
+    private java.io.File collabTempDir;
+    private boolean applyingRemoteCircuit = false;
 
     /**
      * Creates a new instance
@@ -720,34 +746,132 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
 
         file.addSeparator();
 
-        // Collaboration Integration
-        file.add(new ToolTipAction("Start Collaboration Room") {
+        // ── Collaboration — Online (relay server) ──────────────────────────────
+        file.add(new ToolTipAction("Create Collab Room (Online)…") {
             @Override
             public void actionPerformed(ActionEvent e) {
+                String relayUrl = JOptionPane.showInputDialog(Main.this,
+                        "Relay server URL:", "ws://localhost:7777");
+                if (relayUrl == null || relayUrl.trim().isEmpty()) return;
                 try {
-                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                    circuitComponent.getCircuit().save(baos);
-                    String xml = baos.toString("utf-8");
-                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
-                    cj.getMethod("cjCall", String.class, Object[].class).invoke(null, "startCollaboration", new Object[]{xml});
+                    de.neemann.digital.gui.collab.CollabSession[] holder = {null};
+                    holder[0] = new de.neemann.digital.gui.collab.CollabSession(relayUrl.trim(),
+                            new de.neemann.digital.gui.collab.CollabSession.Listener() {
+                                @Override public void onRoomCreated(String code) {
+                                    openCollabWindow(holder[0], code, true);
+                                }
+                                @Override public void onJoined(int n) { /* host never gets this */ }
+                                @Override public void onCircuitReceived(String xml) { /* handled in window */ }
+                                @Override public void onBundleReceived(String b64) { /* handled in window */ }
+                                @Override public void onRelayError(String msg) {
+                                    JOptionPane.showMessageDialog(Main.this, msg, "Relay Error", JOptionPane.ERROR_MESSAGE);
+                                }
+                                @Override public void onDisconnected() { /* window handles */ }
+                            });
+                    String pw = JOptionPane.showInputDialog(Main.this,
+                            "Optional room password (leave blank for none):", "");
+                    if (pw == null) { try { holder[0].close(); } catch (Exception ignored) {} return; }
+                    holder[0].createRoom(pw.trim());
                 } catch (Exception ex) {
-                    showError("Collaboration only available in Web version", ex);
+                    showError("Could not connect to relay server", ex);
                 }
             }
         }.createJMenuItem());
 
-        file.add(new ToolTipAction("Sync Collaboration") {
+        file.add(new ToolTipAction("Join Collab Room (Online)…") {
             @Override
             public void actionPerformed(ActionEvent e) {
+                String input = JOptionPane.showInputDialog(Main.this,
+                        "Enter relay URL and room code as  ws://host:port/CODE :", "ws://localhost:7777/XK7F2Q");
+                if (input == null || input.trim().isEmpty()) return;
                 try {
-                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                    circuitComponent.getCircuit().save(baos);
-                    String xml = baos.toString("utf-8");
-                    Class<?> cj = Class.forName("net.leaningtech.cheerpj.CheerPJ");
-                    cj.getMethod("cjCall", String.class, Object[].class).invoke(null, "syncCollaboration", new Object[]{xml});
+                    // Parse ws://host:port/CODE
+                    String[] parts = input.trim().split("/");
+                    String code = parts[parts.length - 1].toUpperCase();
+                    String relayUrl = input.trim().substring(0, input.trim().lastIndexOf('/'));
+                    de.neemann.digital.gui.collab.CollabSession[] holder = {null};
+                    holder[0] = new de.neemann.digital.gui.collab.CollabSession(relayUrl,
+                            new de.neemann.digital.gui.collab.CollabSession.Listener() {
+                                @Override public void onRoomCreated(String c) { /* guest never gets this */ }
+                                @Override public void onJoined(int n) {
+                                    openCollabWindow(holder[0], code, false);
+                                }
+                                @Override public void onCircuitReceived(String xml) { /* handled in window */ }
+                                @Override public void onBundleReceived(String b64) { /* handled in window */ }
+                                @Override public void onRelayError(String msg) {
+                                    JOptionPane.showMessageDialog(Main.this, msg, "Relay Error", JOptionPane.ERROR_MESSAGE);
+                                }
+                                @Override public void onDisconnected() { /* window handles */ }
+                            });
+                    String pw = JOptionPane.showInputDialog(Main.this,
+                            "Room password (leave blank if none):", "");
+                    if (pw == null) { try { holder[0].close(); } catch (Exception ignored) {} return; }
+                    holder[0].joinRoom(code, pw.trim());
                 } catch (Exception ex) {
-                    showError("Collaboration only available in Web version", ex);
+                    showError("Could not join room", ex);
                 }
+            }
+        }.createJMenuItem());
+
+        // ── Collaboration — LAN (direct TCP, same Wi-Fi) ───────────────────────
+        file.add(new ToolTipAction("Host Collab Session (LAN)…") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (collabHost != null) {
+                    JOptionPane.showMessageDialog(Main.this,
+                            "Already hosting on " + collabHost.getLocalAddress() + ":" + collabHost.getPort()
+                            + "\nGuests connected: " + collabHost.getGuestCount(),
+                            "Collaboration", JOptionPane.INFORMATION_MESSAGE);
+                    return;
+                }
+                String portStr = JOptionPane.showInputDialog(Main.this, "Port to listen on:", "7777");
+                if (portStr == null) return;
+                try {
+                    int port = Integer.parseInt(portStr.trim());
+                    collabHost = new de.neemann.digital.gui.collab.CollabHost(port);
+                    collabHost.setUpdateListener(xml -> applyRemoteCircuit(xml));
+                    circuitComponent.addListener(() -> broadcastCircuit());
+                    JOptionPane.showMessageDialog(Main.this,
+                            "Hosting on " + collabHost.getLocalAddress() + ":" + collabHost.getPort()
+                            + "\nShare this address with collaborators (must be on same network).",
+                            "LAN Collaboration Started", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    showError("Could not start collaboration host", ex);
+                }
+            }
+        }.createJMenuItem());
+
+        file.add(new ToolTipAction("Join Collab Session (LAN)…") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                if (collabGuest != null) {
+                    JOptionPane.showMessageDialog(Main.this,
+                            "Already in a session. Stop it first.",
+                            "Collaboration", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                String addr = JOptionPane.showInputDialog(Main.this, "Host address (ip:port):", "192.168.1.x:7777");
+                if (addr == null || addr.trim().isEmpty()) return;
+                try {
+                    String[] parts = addr.trim().split(":");
+                    String host = parts[0];
+                    int port = Integer.parseInt(parts[1]);
+                    collabGuest = new de.neemann.digital.gui.collab.CollabGuest(host, port, xml -> applyRemoteCircuit(xml));
+                    circuitComponent.addListener(() -> broadcastCircuit());
+                    JOptionPane.showMessageDialog(Main.this, "Connected to " + addr,
+                            "LAN Collaboration Joined", JOptionPane.INFORMATION_MESSAGE);
+                } catch (Exception ex) {
+                    showError("Could not join collaboration session", ex);
+                }
+            }
+        }.createJMenuItem());
+
+        file.add(new ToolTipAction("Stop Collaboration") {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                stopCollaboration();
+                JOptionPane.showMessageDialog(Main.this, "Collaboration stopped.",
+                        "Collaboration", JOptionPane.INFORMATION_MESSAGE);
             }
         }.createJMenuItem());
 
@@ -1835,6 +1959,154 @@ public final class Main extends JFrame implements ClosingWindowListener.ConfirmS
         if (modifiedPrefixVisible != circuitComponent.isModified())
             setFilename(filename, false);
     }
+
+    /** Serialize the current circuit and broadcast to all collab peers. */
+    private void broadcastCircuit() {
+        if (applyingRemoteCircuit) return;
+        if (collabHost == null && collabGuest == null && collabSession == null) return;
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            circuitComponent.getCircuit().save(baos);
+            String xml = baos.toString("utf-8");
+            if (collabHost != null) collabHost.broadcast(xml);
+            if (collabGuest != null) collabGuest.sendUpdate(xml);
+            if (collabSession != null) collabSession.sendCircuit(xml);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Apply a circuit received from a collab peer (must be called on EDT). */
+    private void applyRemoteCircuit(String xml) {
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> applyRemoteCircuit(xml));
+            return;
+        }
+        applyingRemoteCircuit = true;
+        try {
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(
+                    xml.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            de.neemann.digital.draw.elements.Circuit circuit =
+                    de.neemann.digital.draw.elements.Circuit.loadCircuit(bais, shapeFactory);
+            circuitComponent.setCircuit(circuit);
+        } catch (Exception e) {
+            LOGGER.warn("Could not apply remote circuit", e);
+        } finally {
+            applyingRemoteCircuit = false;
+        }
+    }
+
+    /**
+     * Open a dedicated collab window (so the user's current work is unaffected).
+     * The session's listener is rewired to target the new window.
+     *
+     * @param session  already-connected relay session
+     * @param code     room code (used in title and temp dir naming)
+     * @param isHost   true if this user created the room
+     */
+    private void openCollabWindow(de.neemann.digital.gui.collab.CollabSession session,
+                                  String code, boolean isHost) {
+        // Build a new Main window carrying the current circuit (for host) or empty (for guest)
+        de.neemann.digital.draw.elements.Circuit initialCircuit;
+        try {
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            circuitComponent.getCircuit().save(baos);
+            java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(baos.toByteArray());
+            initialCircuit = de.neemann.digital.draw.elements.Circuit.loadCircuit(bais, shapeFactory);
+        } catch (Exception ex) {
+            initialCircuit = new de.neemann.digital.draw.elements.Circuit();
+        }
+
+        Main collabWin = new MainBuilder()
+                .setParent(Main.this)
+                .setCircuit(initialCircuit)
+                .build();
+        collabWin.setTitle("Digital — Collab: " + code + (isHost ? " [host]" : " [guest]"));
+        collabWin.collabSession = session;
+        collabWin.collabRoomCode = code;
+        collabWin.setVisible(true);
+
+        // Wire session events to the NEW window
+        de.neemann.digital.gui.collab.CollabSession.Listener windowListener =
+                new de.neemann.digital.gui.collab.CollabSession.Listener() {
+
+            @Override
+            public void onRoomCreated(String c) { /* already handled before openCollabWindow */ }
+
+            @Override
+            public void onJoined(int n) { /* already handled before openCollabWindow */ }
+
+            @Override
+            public void onCircuitReceived(String xml) {
+                collabWin.applyRemoteCircuit(xml);
+            }
+
+            @Override
+            public void onBundleReceived(String base64Zip) {
+                try {
+                    java.io.File tempDir =
+                            de.neemann.digital.gui.collab.BundleHelper.extractBundle(base64Zip, code);
+                    collabWin.collabTempDir = tempDir;
+                    collabWin.circuitComponent.getLibrary().setRootFilePath(tempDir);
+                } catch (Exception ex) {
+                    LOGGER.warn("Could not extract collab bundle", ex);
+                }
+            }
+
+            @Override
+            public void onRelayError(String msg) {
+                JOptionPane.showMessageDialog(collabWin, msg, "Relay Error", JOptionPane.ERROR_MESSAGE);
+            }
+
+            @Override
+            public void onDisconnected() {
+                collabWin.setTitle(collabWin.getTitle() + " [disconnected]");
+                collabWin.collabSession = null;
+            }
+        };
+
+        // Rewire the session to deliver events to the new window from now on
+        collabWin.collabSessionListener = windowListener;
+        session.setWindowListener(windowListener);
+
+        // Broadcast local changes in the collab window back to the session
+        collabWin.circuitComponent.addListener(collabWin::broadcastCircuit);
+
+        // If host: send the current circuit + bundle immediately
+        if (isHost) {
+            collabWin.broadcastCircuit();
+            java.io.File libRoot = circuitComponent.getLibrary().getRootFilePath();
+            if (libRoot != null) {
+                try {
+                    String bundle = de.neemann.digital.gui.collab.BundleHelper.createBundle(libRoot);
+                    if (bundle != null) session.sendBundle(bundle);
+                } catch (Exception ex) {
+                    LOGGER.warn("Could not send bundle", ex);
+                }
+            }
+        }
+    }
+
+    /** Stops all active collaboration (LAN + relay). */
+    private void stopCollaboration() {
+        if (collabHost != null) {
+            try { collabHost.close(); } catch (Exception ignored) {}
+            collabHost = null;
+        }
+        if (collabGuest != null) {
+            try { collabGuest.close(); } catch (Exception ignored) {}
+            collabGuest = null;
+        }
+        if (collabSession != null) {
+            try { collabSession.close(); } catch (Exception ignored) {}
+            collabSession = null;
+        }
+        de.neemann.digital.gui.collab.BundleHelper.deleteBundle(collabTempDir);
+        collabTempDir = null;
+        collabRoomCode = null;
+    }
+
+    // Mutable holder so the relay session can be rewired to target the collab window
+    private transient de.neemann.digital.gui.collab.CollabSession.Listener collabSessionListener;
 
     /**
      * @return the window position manager

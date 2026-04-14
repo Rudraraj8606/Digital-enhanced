@@ -4,6 +4,8 @@
 
 Digital is an easy-to-use digital logic designer and circuit simulator designed for educational purposes.
 
+**Relay Server:** By connecting to any hosted relay server, you agree to the [Terms of Use](TERMS.md). Educational use only.
+
 ![screnshot](distribution/screenshot.png)
 
 ![screnshot2](distribution/screenshot2.png)
@@ -233,6 +235,10 @@ If you want to build Digital from the source code:
 * A JDK (at least JDK 8) is required (either the Oracle JDK or OpenJDK)
 * maven is used as build system, so the easiest way is to install [maven](https://maven.apache.org/).
 * After that you can simply run `mvn install` to build Digital.
+* If you are building this fork with the collaboration features, use:
+  ```
+  mvn package -DskipTests -Dcheckstyle.skip=true
+  ```
 * Run `mvn site` to create a findbugs and a JaCoCo code coverage report.
 * Most IDEs (Eclipse, NetBeans, IntelliJ) are able to import the `pom.xml` to create a project.
 
