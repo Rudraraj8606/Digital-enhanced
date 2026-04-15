@@ -4,6 +4,9 @@
 
 Digital is an easy-to-use digital logic designer and circuit simulator designed for educational purposes.
 
+> **This is a fork of [hneemann/Digital](https://github.com/hneemann/Digital) with added features:**
+> real-time online collaboration, LAN collaboration, custom wire colors, and a cloud relay server.
+
 **Relay Server:** By connecting to any hosted relay server, you agree to the [Terms of Use](TERMS.md). Educational use only.
 
 ![screnshot](distribution/screenshot.png)
