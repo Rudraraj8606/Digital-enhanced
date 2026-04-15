@@ -1,4 +1,4 @@
-[![Download](distribution/Download.svg)](https://github.com/hneemann/Digital/releases/latest/download/Digital.zip)
+[![Download](distribution/Download.svg)](https://github.com/Rudraraj8606/Digital-enhanced/releases/latest/download/Digital-jar-with-dependencies.jar)
 
 # Digital #
 
