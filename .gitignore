@@ -83,3 +83,15 @@ nbactions.xml
 .project
 .settings
 .vscode
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# SSH keys — never commit
+*.pem
+*.key
+
+# Logs
+*.log
+nohup.out
